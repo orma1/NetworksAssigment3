@@ -8,7 +8,7 @@ def readConfigFile(file):
                 try:
                     key, value = line.split(':') #split line by semicolon into key:value
                     config_dict[key] = value #set the value of key
-                except:
+                except ValueError:
                     print("invalid file format") #if no semicolon, the format is not ok
         return config_dict #after finishing creating the dictionary send it back
 
