@@ -10,7 +10,7 @@ FLAG_SYN = 0x02
 FLAG_PSH = 0x08
 FLAG_ACK = 0x10
 
-CLIENT_CONFIG = {
+CLIENT_CONFIG = {#TODO - implement dynamic size flag
     "server_ip": "127.0.0.1",
     "server_port": 13000,
     "timeout": 5
@@ -82,7 +82,7 @@ def sender_logic(conn: socket.socket, state: ClientState, data_source: str):
             
             # Construct Data Packet (PSH | ACK)
             packet = {
-                "flags": FLAG_PSH | FLAG_ACK,
+                "flags": FLAG_PSH | FLAG_ACK,#TODO - delete ack flag, client only sends ack in hadnshake.
                 "seq": next_seq,
                 "ack": 0, # Client ACKs are usually 0 unless we are bidirectional
                 "payload": payload
@@ -103,7 +103,7 @@ def sender_logic(conn: socket.socket, state: ClientState, data_source: str):
                 print(f"[Sender] Error sending: {e}")
                 break
 
-        # --- B. CHECK TIMEOUT (Go-Back-N) ---
+        # --- B. CHECK TIMEOUT (Hybrid of Go-Back-N and) ---#TODO - add second algorithm
         with state.lock:
             if state.timer_start is not None:
                 elapsed = time.time() - state.timer_start

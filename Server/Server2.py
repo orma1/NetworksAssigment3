@@ -66,7 +66,7 @@ def handle_packets(packet, state: ConnectionState):
             # A. In-Order
             if seq_num == state.expected_seq:
                 print(f"   -> Accepted Data Seq {seq_num}")
-                state.expected_seq += 1
+                state.expected_seq += 1#TODO - why + 1
                 
                 # Check Buffer for gaps we can now fill
                 while state.expected_seq in state.buffer:
@@ -95,7 +95,7 @@ def handle_packets(packet, state: ConnectionState):
             return {"flags": FLAG_ACK | FLAG_FIN, "ack": seq_num + 1}
 
     return None
-
+#this is the part of the real TCP connection. no need to check logic
 def handle_stream(conn: socket.socket, addr: tuple[str, int]):
     state = ConnectionState()
 
