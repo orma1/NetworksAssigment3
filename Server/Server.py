@@ -29,10 +29,16 @@ class NetworkLayer:
         self.dsf = hexStr[2:4] # (1 byte)
         self.total_length = hexStr[4:8] # (2 bytes)
         self.identification = hexStr[8:12] # (2 bytes)
-        self.flags_and_offset = hexStr[12:16]
-        self.ttl = hexStr[16:18]
+        self.flags_and_offset = hexStr[12:16] # (2 bytes)
+        self.ttl = hexStr[16:18] # (1 bytes)
+        self.protocol = hexStr[18:20] # (1 bytes)
+        self.checksum = hexStr[20:24] # (2 bytes)
+        self.dst_address = hexStr[24:32] # (4 bytes)
+        self.src_address = hexStr[32:40] # (4 bytes)
 
-
+class TransportLayer:
+    def __init__(self, hesStr: str):
+        
 
 
 def handle_packets(packet):
