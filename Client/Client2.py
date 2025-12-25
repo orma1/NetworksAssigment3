@@ -42,7 +42,7 @@ def handle_packets(packet, state):
     """
     flags = packet.get("flags", 0)
     server_ack = packet.get("ack", 0)
-    
+    server_seq = packet.get("seq", 0)
     # Debug
     # print(f"[RECV] Flags={flags}, Ack={server_ack}")
 
@@ -66,6 +66,10 @@ def handle_packets(packet, state):
             
             # Respond with ACK
             return {"flags": FLAG_ACK, "seq": state.seq_num, "ack": 0}
+        elif state.timer_start is not None:
+                elapsed = time.time() - state.timer_start
+                if elapsed > state.timeout_value:
+                    print(f"[!!!] TIMEOUT ({elapsed:.2f}s)! Resending Syn packet")
 
     # --- 2. HANDLE DATA ACKS (Server sent ACK) ---
     elif state.state == "ESTABLISHED":
@@ -95,6 +99,28 @@ def handle_packets(packet, state):
                     # If window becomes empty (all sent packets acked), this timestamp 
                     # will effectively be ignored until the Sender adds a new packet.
                     state.timer_start = time.time()
+        return None
+    # Case B: We receive the Server's FIN -> Send Final ACK -> Close
+    # Note: We might receive FIN in FIN_WAIT_2 (normal) or FIN_WAIT_1 (simultaneous close)
+    elif state.state == "Wait_for_FIN_ACK":
+        if (flags & FLAG_ACK) and not (flags & FLAG_FIN):
+            print("   >>> [Recv] Step 2: Server ACKed our FIN. Now waiting for Server FIN...")
+            with state.lock:
+                # We move to the next state, but we DON'T return yet.
+                # The same packet might contain the FIN (Piggybacking).
+                state.state = "FIN_ACK"
+    if state.state in ["Wait_for_FIN_ACK", "FIN_ACK"]:#TODO check if we can do it without wait state
+        if flags & FLAG_FIN:
+            print("   >>> [Recv] Step 3: Server sent FIN.")
+
+            # Step 4: Send Final ACK
+            ack_to_send = server_seq + 1
+
+            with state.lock:
+                state.state = "CLOSED"
+
+            print(f"   >>> [Send] Step 4: Sending Final ACK ({ack_to_send}). Connection CLOSED.")
+            return {"flags": FLAG_ACK, "seq": state.seq_num, "ack": ack_to_send}
 
     return None
 
@@ -199,15 +225,40 @@ def sliding_window(conn: socket.socket, state, buff_data: str, total_len: int, n
         time.sleep(0.01) # Prevent CPU burn
     
     # Finished sending all data, proceed to teardown
-    fin_four_step_handshake(conn, next_seq)
+    fin_four_step_handshake(conn, next_seq, state)
 
-def fin_four_step_handshake(conn: socket.socket, next_seq: int):
+def fin_four_step_handshake(conn: socket.socket, next_seq: int, state: ClientState):
     # --- 4. TEARDOWN (FIN) ---
     print("[Sender] All data acknowledged. Sending FIN...")
-    # [cite: 166] The client initiates the close
-    fin_packet = {"flags": FLAG_FIN, "seq": next_seq, "ack": 0}
+    with state.lock:
+        state.state = "Wait_for_FIN_ACK"
+        # Seq matches the next expected sequence number
+        # we create a new packet with the fin flag to send to the server
+        fin_packet = {"flags": FLAG_FIN, "seq": next_seq, "ack": 0}
+
+    print("Step 1: Sending FIN. State -> Wait_for_FIN_ACK")
+    #send the packet to the server
     conn.sendall((json.dumps(fin_packet) + "\n").encode("utf-8"))
-    
+
+    # --- STEP 2: Wait for ACK from the server ---
+    print("Waiting for Server to ACK our FIN...")
+    while True:
+        with state.lock:
+            #if we got the fin_ack we can finish waiting
+            if state.state == "FIN_ACK" or state.state == "CLOSED":
+                break
+        time.sleep(0.1)
+
+    # --- STEP 3: Wait for Server's FIN (handled by receiver) ---
+    print("[Teardown] Server acknowledged. Now waiting for Server to close the connection...")
+    while True:
+        with state.lock:
+            # The receiver deals with the incoming FIN and transitions to CLOSED
+            if state.state == "CLOSED":
+                break
+        time.sleep(0.1)
+
+    print("[Teardown] Connection Closed Cleanly.")
     # TODO: strictly implement "4-Way Handshake":
     # 1. We send FIN (Done above)
     # 2. We wait for ACK from Server (Handled in handle_packets)
@@ -247,6 +298,10 @@ def handle_stream(conn: socket.socket, addr: tuple[str, int], state: ClientState
             # --- RECEIVE LOOP ---
             buff = b"" 
             while True:
+                #if the state is closed - meaning four way handshake finished, we close the client app.
+                with state.lock:
+                    if state.state == "CLOSED":
+                        break
                 chunk = conn.recv(4096) 
                 if not chunk:
                     break

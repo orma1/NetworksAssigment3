@@ -3,6 +3,7 @@ import json
 import socket
 import threading
 import random # [Added] Needed for dynamic resizing logic
+import time
 
 # --- TCP FLAG CONSTANTS ---
 FLAG_FIN = 0x01
@@ -30,7 +31,12 @@ def handle_packets(packet, state: ConnectionState):
     """
     The Brain: Processes the packet using Bit-Flags and updates State.
     """
-    flags = packet.get("flags", 0) # TODO: Either we want to explain this edge case, or we just replace it with unsafe code
+    # set the flags according to what we got in the packet.
+    # If there is no flags section in the decoded packet, we set it to 0 (meaning no flag is active),
+    # this should only happen if the packet is not ok
+    flags = packet.get("flags", 0)
+    #set the sequence number according to what we got in the packet.
+    #If there is no seq section in the decoded packet, we set it to 0 (default before the handshake finished),
     seq_num = packet.get("seq", 0)
     
     # Debug print
@@ -91,7 +97,14 @@ def handle_packets(packet, state: ConnectionState):
                     print(f"   -> Buffer Fill Seq {state.expected_seq}")
                     del state.buffer[state.expected_seq]
                     state.expected_seq += 1
-                
+                #if we have later packets in the buffer, we need to check if we got the fin already from the client
+                if state.expected_seq in state.buffer:
+                    buffered_packet = state.buffer[state.expected_seq]
+                    if buffered_packet.get("flags", 0) & FLAG_FIN:
+                        print(f"[Server] Found buffered FIN (Seq {state.expected_seq}). All data now complete.")
+                        time.sleep(1.0)
+                        state.state = "LAST_ACK"
+                        return {"flags": FLAG_ACK | FLAG_FIN, "ack": state.expected_seq + 1}
                 # --- [ADDED] DYNAMIC RESIZING LOGIC ---
                 # "The server can also send the flag 'dynamic message size = true'"
                 response = {"flags": FLAG_ACK, "ack": state.expected_seq - 1}
@@ -121,8 +134,31 @@ def handle_packets(packet, state: ConnectionState):
 
         # 2. Handle Connection Close (FIN)
         if flags & FLAG_FIN:
-            print("Received FIN. Sending FIN-ACK.")
-            return {"flags": FLAG_ACK | FLAG_FIN, "ack": seq_num + 1}
+            #if we have processed all packets we can send fin from server side.
+            if seq_num == state.expected_seq:
+                print(f"[Server] Received FIN (Seq {seq_num}). All data received. Sending ACK.")
+                state.state = "LAST_ACK"
+                return {"flags": FLAG_ACK | FLAG_FIN, "ack": seq_num + 1}
+            #if we have not finished processing packets we are waiting for finishing processing first,
+            # we buffer the fin for late
+            elif seq_num > state.expected_seq:
+                print(
+                    f"[Server] Early FIN received (Seq {seq_num}). Waiting for missing data (Expect {state.expected_seq}).")
+                # We are missing packets!
+                # We Buffer this FIN packet just like out-of-order data.
+                # When the missing data arrives, we will check the buffer and find this FIN.
+                state.buffer[seq_num] = packet
+                return {"flags": FLAG_ACK, "ack": state.expected_seq - 1}
+
+            else:
+                # Duplicate FIN (Old packet), just ACK it again
+                return {"flags": FLAG_ACK, "ack": state.expected_seq}
+    elif state.state == "LAST_ACK":
+        if flags & FLAG_ACK:
+            #if we received the ack for our fin, we can close the connection with the client
+            #because server is usually always on, I changed the state for listen, to wait for a new client
+            print("[Server] Received Final ACK. Connection Finished. now we wait for a new connection")
+            state.state = "LISTEN"
 
     return None
 
