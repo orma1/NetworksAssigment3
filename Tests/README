@@ -1,0 +1,30 @@
+# Tests
+## User interface
+ - 1 We need to check if the client can load a file from the config and to pass it to the Server
+ - 2 We need to check if the client chooses manual input, the client will be able to send packtes
+   that he enters manually and the connection wont be closed untill he closes the CLI with a key press
+## Client:
+ - We want to make sure that the client starts with Three Way Handshake
+ - Then the client asks for the server max_msg_size and is "DynamicSize" acitvated
+ - We want to make sure that in case the bool FLAG "DynamicSize" is True that we recive in every ACK the max_msg_size with non negative size
+ - We want to make sure that if case the bool FLAG "DynamicSize" is False we send PSH request for max_msg_size and recive it during ACK
+ - Make sure that the SEQ numbers are right
+## Client SlidingWindow
+ - We need to check that on recive of a new DynamicSize we will recalculate the messages in sliding window
+ - We need to make sure we contain a pointer to the oldest packet that we haven't recived an ACK to her yet, in case of a timeout
+ - We need to check if the window slides only upon reciving an ACK, and slides according to GO-BACK-N algorithm (Altough the we use a hybrid of a sliding window)
+## Client Timeouts:
+ - We need to make sure that if we send all the sequences, we resend all the packets (according to the size of the sliding window) from the oldets packet.
+## Client FIN:
+ - We need to make sure that when we are done sending packets enitely. The client will be the side who initializes the FIN first and gets and ACK back, 
+   then he waits for the Server to have its own FIN and Client responds with ACK.
+
+## Server
+ - Make sure he reads the inputs from the config that initialize the max_messgae_size, dynamic message size boolean
+ - Make sure he buffers a seq packets that came out of order
+ - Make sure he drops the messages that are too big and send a new updated ACK
+ - Make sure that he updateds the max_message_size when DynamicSize bool is True
+ - Make sure the server buffer is being flashed when the size changes
+ - Make sure the server drops the packets too big
+ - Make sure the server resends the right ACK number
+ - Make sure the server FIN only after the client
