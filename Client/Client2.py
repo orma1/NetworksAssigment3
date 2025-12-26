@@ -1,8 +1,11 @@
 import argparse
 import json
+import os
 import socket
 import threading
 import time
+
+import FileInterpeter
 
 # --- NAMING CONVENTIONS & FLAGS ---
 # These flags mimic the standard TCP header bits.
@@ -431,6 +434,24 @@ def start_client(ip: str, port: int):
         print(f"Client Error: {e}")
     finally:
         clientSocket.close()
+#TODO co-config, a function will read and update both server and client
+#TODO if client chooses manual typing we will change the values accordingly
+def user_menu():
+    print("Hello please choose from the following options:")
+    print("1 - work with user input")
+    print("2 - work from file")
+    option = input()
+    if option == 1:
+        message = input("enter message for the server")
+        window_size = input("choose window size - number of packets")
+        timeout = input("enter the number of seconds for retransmission")
+    elif option == 2:
+        os.chdir("..")# we go to the parent directory as the server needs the file too.
+        options = FileInterpeter.readConfigFile("Config.txt")
+        message = options.get("message")
+        maximum_msg_size = options.get("maximum_msg_size")
+        window_size = options.get("window_size")
+        timeout = options.get("timout")
 
 def main():
     ap = argparse.ArgumentParser(description="JSON TCP Client (MATALA3)")
