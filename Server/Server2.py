@@ -77,6 +77,18 @@ def handle_packets(packet, state: ConnectionState):
             # --- DYNAMIC SIZE ENFORCEMENT ---
             # If the client sent a packet bigger than allowed, DROP IT.
             payload = packet.get("payload", "")
+            #we check if we need to send the size of the message as part of the process:
+            if payload == "REQ_SIZE":
+                print(f"[Server] Received Size Request (Seq {seq_num}). Sending: {state.current_max_msg_size}")
+                # We acknowledge the request and send the size
+                # The ACK increments by one
+                state.expected_seq += 1
+                return {
+                    "flags": FLAG_ACK | FLAG_PSH,
+                    "ack": seq_num + 1,
+                    "max_msg_size": state.current_max_msg_size,
+                    "payload": "SIZE_OK"  # Optional acknowledgement text
+                }
             if len(payload) > state.current_max_msg_size:
                 print(f"[!] Dropping Oversized Seq {seq_num} ({len(payload)} > {state.current_max_msg_size})")
                 # Send ACK for the last valid packet to force Client Timeout & Resize

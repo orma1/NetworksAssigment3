@@ -26,7 +26,7 @@ class ClientState:
     """Tracks the Client's View of the Connection"""
     def __init__(self):
         self.lock = threading.Lock()
-        self.state = "CLOSED"    # CLOSED -> SYNSENT -> ESTABLISHED -> FIN_WAIT
+        self.state = "CLOSED"    # CLOSED -> SYNSENT -> ESTABLISHED -> DATA_TRANSFER -> WAIT_FOR_FIN_ACK -> FIN_ACK
         self.seq_num = 0         # Client's current sequence number (for Handshake)
         self.window_base = 0     # The oldest unacknowledged packet sequence number
         self.max_msg_size = 1024 # Default size, updated dynamically by Server 
@@ -70,9 +70,23 @@ def handle_packets(packet, state):
                 elapsed = time.time() - state.timer_start
                 if elapsed > state.timeout_value:
                     print(f"[!!!] TIMEOUT ({elapsed:.2f}s)! Resending Syn packet")
+    #if connection is established we need to ask for message size
+    elif state.state == "ESTABLISHED":
+        #we wait for an answer from the server
+        if (flags & FLAG_ACK) and (flags & FLAG_PSH):
+            # if the size is included, we print a message
+            if "max_msg_size" in packet:
+                new_size = int(packet["max_msg_size"])
+                print(f"   >>> [Negotiation] Server confirmed size: {new_size}")
+                #after the message we can set the size and move the state to data_transfer
+                with state.lock:
+                    state.max_msg_size = new_size
+                    state.state = "DATA_TRANSFER"  # Unlock the sender thread
+                    # Update window base because we consumed a sequence number for the request
+                    state.window_base = server_ack
 
     # --- 2. HANDLE DATA ACKS (Server sent ACK) ---
-    elif state.state == "ESTABLISHED":
+    elif state.state == "DATA_TRANSFER":
         if flags & FLAG_ACK:
             
             # CHECK FOR DYNAMIC SIZE UPDATE 
@@ -109,6 +123,7 @@ def handle_packets(packet, state):
                 # We move to the next state, but we DON'T return yet.
                 # The same packet might contain the FIN (Piggybacking).
                 state.state = "FIN_ACK"
+    #if state.state == "FIN_ACK":
     if state.state in ["Wait_for_FIN_ACK", "FIN_ACK"]:#TODO check if we can do it without wait state
         if flags & FLAG_FIN:
             print("   >>> [Recv] Step 3: Server sent FIN.")
@@ -259,11 +274,43 @@ def fin_four_step_handshake(conn: socket.socket, next_seq: int, state: ClientSta
         time.sleep(0.1)
 
     print("[Teardown] Connection Closed Cleanly.")
-    # TODO: strictly implement "4-Way Handshake":
+
     # 1. We send FIN (Done above)
     # 2. We wait for ACK from Server (Handled in handle_packets)
     # 3. We wait for FIN from Server (Need to add logic in handle_packets to detect this)
     # 4. We send final ACK (Need to add logic in handle_packets)
+
+
+def ask_size(conn, state):
+    """
+    Sends a request to the server to get the max message size parameter.
+    Waits until the Receiver thread updates state to DATA_TRANSFER.
+    """
+    print("[Sender] Handshake done. Requesting Message Size...")
+    req_payload = "REQ_SIZE"
+    with state.lock:
+        state.state = "ESTABLISHED"
+        current_seq = state.seq_num
+
+    packet = {
+        "flags": FLAG_PSH,
+        "seq": current_seq,
+        "ack": 0,
+        "payload": req_payload
+    }
+
+    conn.sendall((json.dumps(packet) + "\n").encode("utf-8"))
+
+    # Wait for response (Receiver thread will switch state to DATA_TRANSFER)
+    while True:
+        with state.lock:
+            if state.state == "DATA_TRANSFER":
+                # We need to increment our sequence number counter
+                state.seq_num += 1
+                break
+        time.sleep(0.1)
+
+    print(f"[Sender] Size Updated: {state.max_msg_size}. Starting Data Transfer.")
 
 def sender_logic(conn: socket.socket, state, data_source: str):
     """
@@ -271,17 +318,18 @@ def sender_logic(conn: socket.socket, state, data_source: str):
     """
     # 1. Handshake
     three_way_handshake(state)
-
+    ask_size(conn, state)
     print("[Sender] Connection Established. Starting Dynamic Data Transfer...")
-    
+    #after the handshake finished we ask the server for the message size
     # 2. Prepare Data
     buff_data = data_source 
     total_len = len(buff_data)
     
     # Map Sequence Numbers to Byte Offsets
     # seq 1 maps to index 0 of the string
-    seq_map = {1: 0} 
-    next_seq = 1 
+    seq_map = {2: 0}
+    #TODO - make sure to do an if according to if we ask server or not
+    next_seq = 2
     
     # 3. Transfer Data
     sliding_window(conn, state, buff_data, total_len, next_seq, seq_map)
