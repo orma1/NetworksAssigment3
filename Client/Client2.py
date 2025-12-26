@@ -31,7 +31,7 @@ class ClientState:
         self.window_base = 0     # The oldest unacknowledged packet sequence number
         self.max_msg_size = 1024 # Default size, updated dynamically by Server 
         self.window_size = 4     # Sliding window capacity
-        
+        self.dynamic_message_size = False
         # Timer Logic
         self.timer_start = None
         self.timeout_value = CLIENT_CONFIG["timeout"]
@@ -51,11 +51,20 @@ def handle_packets(packet, state):
     if state.state == "SYNSENT":
         if (flags & FLAG_SYN) and (flags & FLAG_ACK):
             print("   >>> Handshake Step 2: Received SYN-ACK")
-            
-            # Update Params if server sent them (Initial Negotiation) 
+            #if we have max message size in packet, we update it
             if "max_msg_size" in packet:
                 state.max_msg_size = int(packet["max_msg_size"])
-                print(f"   >>> Negotiated Max Msg Size: {state.max_msg_size}")
+
+            # Use the explicit flag if provided, otherwise default to False
+            if "dynamic_window" in packet:
+                state.dynamic_message_size = packet["dynamic_window"]
+                print(f"   >>> Server Dynamic Mode: {state.dynamic_message_size}")
+            else:
+                # Fallback: If server didn't send the flag but sent a size,
+                # you might want to default to True or False depending on preference.
+                state.dynamic_message_size = False
+                # --- FIX END ---
+
 
             # Prepare Step 3: Send ACK to complete connection 
             with state.lock:
@@ -70,7 +79,8 @@ def handle_packets(packet, state):
                 elapsed = time.time() - state.timer_start
                 if elapsed > state.timeout_value:
                     print(f"[!!!] TIMEOUT ({elapsed:.2f}s)! Resending Syn packet")
-    #if connection is established we need to ask for message size
+    #if connection is established we need to ask for initial message size
+    #this happens no matter if message size is dynamic or not
     elif state.state == "ESTABLISHED":
         #we wait for an answer from the server
         if (flags & FLAG_ACK) and (flags & FLAG_PSH):
@@ -85,13 +95,12 @@ def handle_packets(packet, state):
                     # Update window base because we consumed a sequence number for the request
                     state.window_base = server_ack
 
-    # --- 2. HANDLE DATA ACKS (Server sent ACK) ---
     elif state.state == "DATA_TRANSFER":
         if flags & FLAG_ACK:
             
             # CHECK FOR DYNAMIC SIZE UPDATE 
             # "If dynamic, it will be sent as part of the ack packet" 
-            if "max_msg_size" in packet:
+            if state.dynamic_message_size and "max_msg_size" in packet:
                 new_size = int(packet["max_msg_size"])
                 with state.lock:
                     if new_size != state.max_msg_size:
@@ -312,12 +321,13 @@ def ask_size(conn, state):
 
     print(f"[Sender] Size Updated: {state.max_msg_size}. Starting Data Transfer.")
 
-def sender_logic(conn: socket.socket, state, data_source: str):
+def sender_logic(conn: socket.socket, state: ClientState, data_source: str):
     """
     Main Sender Loop: Orchestrates the connection lifecycle.
     """
     # 1. Handshake
     three_way_handshake(state)
+    #we ask after handshake for initial message size
     ask_size(conn, state)
     print("[Sender] Connection Established. Starting Dynamic Data Transfer...")
     #after the handshake finished we ask the server for the message size
@@ -325,11 +335,15 @@ def sender_logic(conn: socket.socket, state, data_source: str):
     buff_data = data_source 
     total_len = len(buff_data)
     
-    # Map Sequence Numbers to Byte Offsets
-    # seq 1 maps to index 0 of the string
-    seq_map = {2: 0}
+    #depending on if we have dynamic message size or not we need to set seq accordingly
+    if not state.dynamic_message_size:
+        seq_map = {2: 0}
+        next_seq = 2
+    else:
+        seq_map = {1: 0}
+        next_seq = 1
     #TODO - make sure to do an if according to if we ask server or not
-    next_seq = 2
+
     
     # 3. Transfer Data
     sliding_window(conn, state, buff_data, total_len, next_seq, seq_map)
@@ -380,7 +394,6 @@ def start_client(ip: str, port: int):
     
     # 1. Create Shared State
     state = ClientState()
-    
     # 2. Connect Socket
     # We create the socket OUTSIDE the 'with' block of handle_stream 
     # so we can pass it to the sender thread too.

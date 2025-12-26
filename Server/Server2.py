@@ -58,7 +58,7 @@ def handle_packets(packet, state: ConnectionState):
                 "flags": FLAG_SYN | FLAG_ACK, 
                 "ack": 0, 
                 "max_msg_size": state.current_max_msg_size,
-                "dynamic_window": SERVER_CONFIG["dynamic_window"]
+                "dynamic_window": SERVER_CONFIG["dynamic_window"],
             }
 
     # --- PHASE 2: FINISH HANDSHAKE (ACK) ---
@@ -96,7 +96,7 @@ def handle_packets(packet, state: ConnectionState):
                     "flags": FLAG_ACK, 
                     "ack": state.expected_seq - 1,
                     "max_msg_size": state.current_max_msg_size, # <-- Sending in the ACK the new valid size
-                    "dynamic_window": SERVER_CONFIG["dynamic_window"] 
+                    "dynamic_window": SERVER_CONFIG["dynamic_window"]
                 }
 
             # A. In-Order
@@ -131,7 +131,6 @@ def handle_packets(packet, state: ConnectionState):
                         print(f"[Dynamic] Resizing Max Msg to {new_size}")
                         state.current_max_msg_size = new_size
                         response["max_msg_size"] = new_size # Client will see this and wipe map
-                
                 return response
 
             # B. Out-of-Order (Buffer it) 
