@@ -120,17 +120,18 @@ def handle_packets(packet, state: ConnectionState):
                 # --- [ADDED] DYNAMIC RESIZING LOGIC ---
                 # "The server can also send the flag 'dynamic message size = true'"
                 response = {"flags": FLAG_ACK, "ack": state.expected_seq - 1}
-                
-                if SERVER_CONFIG["dynamic_window"] and random.random() < 0.2: # 20% chance to change
-                    # 3:1 Bias: 75% chance to grow/stay, 25% chance to shrink
-                    change_factor = random.choices([1.5, 0.5], weights=[0.75, 0.25])[0]
-                    new_size = int(state.current_max_msg_size * change_factor)
-                    new_size = max(10, min(new_size, 1024)) # Clamp values
+                if SERVER_CONFIG["dynamic_window"]:
+                    new_size = state.current_max_msg_size
+                    if SERVER_CONFIG["dynamic_window"] and random.random() < 0.2: # 20% chance to change
+                        # 3:1 Bias: 75% chance to grow/stay, 25% chance to shrink
+                        change_factor = random.choices([1.5, 0.5], weights=[0.75, 0.25])[0]
+                        new_size = int(state.current_max_msg_size * change_factor)
+                        new_size = max(10, min(new_size, 1024)) # Clamp values
                     
-                    if new_size != state.current_max_msg_size:
-                        print(f"[Dynamic] Resizing Max Msg to {new_size}")
-                        state.current_max_msg_size = new_size
-                        response["max_msg_size"] = new_size # Client will see this and wipe map
+                        if new_size != state.current_max_msg_size:
+                            print(f"[Dynamic] Resizing Max Msg to {new_size}")
+                            state.current_max_msg_size = new_size
+                    response["max_msg_size"] = new_size  # Client will see this and wipe map
                 return response
 
             # B. Out-of-Order (Buffer it) 
