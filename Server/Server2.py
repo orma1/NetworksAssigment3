@@ -3,6 +3,7 @@ import json
 import os
 import pathlib
 import socket
+import sys
 import threading
 import random # [Added] Needed for dynamic resizing logic
 import time
@@ -82,8 +83,12 @@ def handle_packets(packet, state: ConnectionState):
                 try:
                     state.current_max_msg_size = int(config_dict.get("maximum_msg_size")) #we set max message size from file
                     SERVER_CONFIG["dynamic_window"] = config_dict.get("dynamic_message_size") #we set dynamic_window from the file
+                    if config_dict.get("dynamic_message_size") != "True" and config_dict.get("dynamic_message_size") != "False":
+                        print("dynamic message size should be either True or False (with capital letter)")
+                        raise ValueError
                 except ValueError:
                     print("invalid values in the file")  # either max_msg_size is not in or dynamic message size is not bool
+                    sys.exit()
             return {#either way we return the syn ack packet with the max message size and dynamic window from server
                 "flags": FLAG_SYN | FLAG_ACK, 
                 "ack": 0,

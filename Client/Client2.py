@@ -495,7 +495,7 @@ def user_menu(ip: str, port: int):
             if state.timeout_value <= 2:
                 print("timeout > 2")
                 raise ValueError
-            state.dynamic_message_size = bool(config_dict.get("dynamic message size"))
+            state.dynamic_message_size = config_dict.get("dynamic message size")
             state.file = True  # we need to update the server about config reading so he will read too
         except FileNotFoundError:
             print(f"Critical Error: Config file not found  \n OR: \n Message file was not found:")
