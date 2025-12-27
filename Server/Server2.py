@@ -148,7 +148,7 @@ def handle_packets(packet, state: ConnectionState):
                         print(f"[Server] Found buffered FIN (Seq {state.expected_seq}). All data now complete.")
                         time.sleep(1.0)
                         state.state = "LAST_ACK"
-                        return {"flags": FLAG_ACK | FLAG_FIN, "ack": state.expected_seq + 1}
+                        return {"flags": FLAG_ACK, "ack": state.expected_seq + 1}
                 # --- [ADDED] DYNAMIC RESIZING LOGIC ---
                 # "The server can also send the flag 'dynamic message size = true'"
                 response = {"flags": FLAG_ACK, "ack": state.expected_seq - 1}

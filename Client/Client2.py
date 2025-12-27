@@ -346,7 +346,7 @@ def sender_logic(conn: socket.socket, state: ClientState, data_source: str):
     sliding_window(conn, state, buff_data, total_len, next_seq, seq_map)
 
 
-def handle_stream(conn: socket.socket, addr: tuple[str, int], state: ClientState):
+def handle_stream(conn: socket.socket, state: ClientState):
     """
     Main Receiver Loop. 
     Listens for packets and updates SHARED 'state'.
@@ -420,7 +420,7 @@ def start_client(ip: str, port: int, state: ClientState, message: str):
         
         # 5. Enter Receiver Loop (Main Thread)
         # This will block until connection closes
-        handle_stream(clientSocket, SERVER_ADDRESS, state)
+        handle_stream(clientSocket, state)
 
     except ConnectionRefusedError:
         print("Error: Could not connect. Is the server running?")
@@ -438,7 +438,7 @@ def user_menu(ip: str, port: int):
     message = ""
 
     # Get inputs from user
-    #user will choose message, window size and timeout value.
+    #he will choose message, window size and timeout value.
     print_options()
     option = input()
 
@@ -475,7 +475,7 @@ def user_menu(ip: str, port: int):
                             key, value = line.split(':', 1)  # split line by semicolon into key:value
                             key = key.strip()
                             value = value.strip()
-                            # we set maxsplit to 1 to make sure it does not
+                            # we set max split to 1 to make sure it does not
                             # Strip both standard quotes (") and curly quotes (” and “)
                             # as it is not part of the file name
                             value = value.strip('"').strip('”').strip('“')
@@ -498,9 +498,9 @@ def user_menu(ip: str, port: int):
             state.dynamic_message_size = bool(config_dict.get("dynamic message size"))
             state.file = True  # we need to update the server about config reading so he will read too
         except FileNotFoundError:
-            print(f"Critical Error: Config file not found at {CONFIG_PATH} \n OR: \n Message was not found: {message_file}")
+            print(f"Critical Error: Config file not found  \n OR: \n Message file was not found:")
         except ValueError:
-            print("invalid input in the file, make sure it is like the skeleton provided in assigment 3")
+            print("invalid input in the file, make sure it is like the skeleton provided in assignment 3")
             user_menu(ip, port)
     else:
         print("invalid input please choose 1 or 2")
