@@ -27,7 +27,7 @@ class ClientState:
     """Tracks the Client's View of the Connection"""
     def __init__(self):
         self.lock = threading.Lock()
-        self.state = "CLOSED"    # CLOSED -> SYNSENT -> ESTABLISHED -> DATA_TRANSFER -> WAIT_FOR_FIN_ACK -> FIN_ACK
+        self.state = "CLOSED"    # CLOSED -> THREE_WAY_HANDSHAKE -> REQ_SIZE -> DATA_TRANSFER -> WAIT_FOR_FIN_ACK -> FIN_ACK
         self.seq_num = 0         # Client's current sequence number (for Handshake)
         self.window_base = 0     # The oldest unacknowledged packet sequence number
         self.max_msg_size = 1024 # Default size, updated dynamically by Server 
@@ -50,7 +50,7 @@ def handle_packets(packet, state):
 
     # --- 1. HANDLE HANDSHAKE (Server sent SYN-ACK) ---
     # TODO: Make sure if we don't get from the Server back and SYN-ACK, we send after timeout a SYN again.
-    if state.state == "SYNSENT":
+    if state.state == "THREE_WAY_HANDSHAKE":
         if (flags & FLAG_SYN) and (flags & FLAG_ACK):
             print("   >>> Handshake Step 2: Received SYN-ACK")
             #if we have max message size in packet, we update it
@@ -70,7 +70,7 @@ def handle_packets(packet, state):
 
             # Prepare Step 3: Send ACK to complete connection 
             with state.lock:
-                state.state = "ESTABLISHED"
+                state.state = "REQ_SIZE"
                 #state.seq_num += 1
                 # Handshake consumes Seq 0. Window starts at Seq 1.
                 state.window_base = 1 
@@ -84,7 +84,7 @@ def handle_packets(packet, state):
                     print(f"[!!!] TIMEOUT ({elapsed:.2f}s)! Resending Syn packet")
     #if connection is established we need to ask for initial message size
     #this happens no matter if message size is dynamic or not
-    elif state.state == "ESTABLISHED":
+    elif state.state == "REQ_SIZE":
         #we wait for an answer from the server
         if (flags & FLAG_ACK) and (flags & FLAG_PSH):
             # if the size is included, we print a message
@@ -159,7 +159,7 @@ def three_way_handshake(state):
     print("[Sender] Waiting for Handshake...")
     while True:
         with state.lock:
-            if state.state == "ESTABLISHED":
+            if state.state == "REQ_SIZE":
                 break
         time.sleep(0.1)
 
@@ -300,7 +300,7 @@ def ask_size(conn, state):
     print("[Sender] Handshake done. Requesting Message Size...")
     req_payload = "REQ_SIZE"
     with state.lock:
-        state.state = "ESTABLISHED"
+        state.state = "REQ_SIZE"
         state.seq_num += 1
 
     packet = {
@@ -414,7 +414,7 @@ def start_client(ip: str, port: int, state: ClientState, message: str):
 
         # 4. Initiate Handshake (Client Speaks First) [cite: 19]
         print(">>> Initiating Handshake (Sending SYN)...")
-        state.state = "SYNSENT"
+        state.state = "THREE_WAY_HANDSHAKE"
         syn_packet = {"flags": FLAG_SYN, "seq": 0, "file": state.file}
         clientSocket.sendall((json.dumps(syn_packet) + "\n").encode("utf-8"))
         
