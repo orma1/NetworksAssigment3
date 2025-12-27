@@ -49,7 +49,7 @@ def handle_packets(packet, state):
     # print(f"[RECV] Flags={flags}, Ack={server_ack}")
 
     # --- 1. HANDLE HANDSHAKE (Server sent SYN-ACK) ---
-    # TODO: Make sure if we don't get from the Server back and SYN-ACK, we send after timeout a SYN again.
+
     if state.state == "THREE_WAY_HANDSHAKE":
         if (flags & FLAG_SYN) and (flags & FLAG_ACK):
             print("   >>> Handshake Step 2: Received SYN-ACK")
@@ -136,7 +136,7 @@ def handle_packets(packet, state):
                 # The same packet might contain the FIN (Piggybacking).
                 state.state = "FIN_ACK"
     #if state.state == "FIN_ACK":
-    if state.state in ["Wait_for_FIN_ACK", "FIN_ACK"]:#TODO check if we can do it without wait state
+    if state.state in ["Wait_for_FIN_ACK", "FIN_ACK"]:
         if flags & FLAG_FIN:
             print("   >>> [Recv] Step 3: Server sent FIN.")
 
@@ -339,7 +339,7 @@ def sender_logic(conn: socket.socket, state: ClientState, data_source: str):
     #seq0: three-way handshake, seq1: ACK, Seq2: req_size
     seq_map = {2: 0} #<- data transfer: seq2 - seqN+2 (N= num of segmenations)
     next_seq = 2
-    #TODO - make sure to do an if according to if we ask server or not
+
 
     
     # 3. Transfer Data
@@ -428,8 +428,8 @@ def start_client(ip: str, port: int, state: ClientState, message: str):
         print(f"Client Error: {e}")
     finally:
         clientSocket.close()
-#TODO co-config, a function will read and update both server and client
-#TODO if client chooses manual typing we will change the values accordingly
+
+
 
 def user_menu(ip: str, port: int):
 
