@@ -7,14 +7,11 @@ import time
 
 # --- NAMING CONVENTIONS & FLAGS ---
 # These flags mimic the standard TCP header bits.
-# FLAG_FIN (0x01): "Finish". Used to gracefully close the connection.
-# FLAG_SYN (0x02): "Synchronize". Used to initiate the 3-way handshake.
-# FLAG_PSH (0x08): "Push". Indicates that data is being sent (Payload).
-# FLAG_ACK (0x10): "Acknowledgment". Confirm receipt of packets.
-FLAG_FIN = 0x01
-FLAG_SYN = 0x02
-FLAG_PSH = 0x08
-FLAG_ACK = 0x10
+
+FLAG_FIN = 0x01 #"Finish" Used to gracefully close the connection.
+FLAG_SYN = 0x02 #"Synchronize" 3-way handshake.
+FLAG_PSH = 0x08 #"Push" (Payload).
+FLAG_ACK = 0x10 #"Acknowledgment".
 
 CLIENT_CONFIG = {
     "server_ip": "127.0.0.1",
@@ -30,7 +27,7 @@ class ClientState:
         self.state = "CLOSED"    # CLOSED -> THREE_WAY_HANDSHAKE -> REQ_SIZE -> DATA_TRANSFER -> WAIT_FOR_FIN_ACK -> FIN_ACK
         self.seq_num = 0         # Client's current sequence number (for Handshake)
         self.window_base = 0     # The oldest unacknowledged packet sequence number
-        self.max_msg_size = 1024 # Default size, updated dynamically by Server 
+        self.max_msg_size = CLIENT_CONFIG["window_size"] # Default size, updated dynamically by Server
         self.window_size = 4     # Sliding window capacity
         self.dynamic_message_size = False
         # Timer Logic
@@ -46,7 +43,7 @@ def handle_packets(packet, state):
     server_ack = packet.get("ack", 0)
     server_seq = packet.get("seq", 0)
     # Debug
-    # print(f"[RECV] Flags={flags}, Ack={server_ack}")
+    # LOGS: "[RECV] Flags={flags}, Ack={server_ack}"
 
     # --- 1. HANDLE HANDSHAKE (Server sent SYN-ACK) ---
 
@@ -390,10 +387,6 @@ def start_client(ip: str, port: int, state: ClientState, message: str):
     SERVER_ADDRESS = (ip, port)
     
     # 1. Create Shared State
-    #state = ClientState()
-    # 2. Connect Socket
-    # We create the socket OUTSIDE the 'with' block of handle_stream 
-    # so we can pass it to the sender thread too.
     clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     clientSocket.settimeout(None) # Blocking mode for recv
     
@@ -401,10 +394,8 @@ def start_client(ip: str, port: int, state: ClientState, message: str):
         clientSocket.connect(SERVER_ADDRESS)
         print(f"Connected to {ip}:{port}")
         
-        # 3. Start Sender Thread (Background)
-        # This simulates reading from a file and sending chunks
-        #dummy_file_data = "This is a long message that demonstrates the Go-Back-N sliding window protocol logic." * 5
-        
+        # 2. Start Sender Thread
+
         sender_thread = threading.Thread(
             target=TCP_emulator,
             args=(clientSocket, state, message),
@@ -412,15 +403,13 @@ def start_client(ip: str, port: int, state: ClientState, message: str):
         )
         sender_thread.start()
 
-        # 4. Initiate Handshake (Client Speaks First) [cite: 19]
+        # 3. Real TCP Stream Thread (Main Thread)
         print(">>> Initiating Handshake (Sending SYN)...")
         state.state = "THREE_WAY_HANDSHAKE"
         syn_packet = {"flags": FLAG_SYN, "seq": 0, "file": state.file}
         clientSocket.sendall((json.dumps(syn_packet) + "\n").encode("utf-8"))
-        
-        # 5. Enter Receiver Loop (Main Thread)
-        # This will block until connection closes
-        handle_stream(clientSocket, state)
+
+        handle_stream(clientSocket, state)#This will block until connection closes
 
     except ConnectionRefusedError:
         print("Error: Could not connect. Is the server running?")
@@ -488,6 +477,7 @@ def user_menu(ip: str, port: int):
             print(message)
             state.maximum_msg_size = int(config_dict.get("maximum_msg_size"))
             state.window_size = int(config_dict.get("window_size"))
+            #validations
             if state.window_size <= 0:
                 print("window_size > 0")
                 raise ValueError
@@ -495,6 +485,7 @@ def user_menu(ip: str, port: int):
             if state.timeout_value <= 2:
                 print("timeout > 2")
                 raise ValueError
+
             state.dynamic_message_size = config_dict.get("dynamic message size")
             state.file = True  # we need to update the server about config reading so he will read too
         except FileNotFoundError:
@@ -521,7 +512,7 @@ def main():
     ap.add_argument("--port", type=int, default=13000)
     args = ap.parse_args()
     user_menu(args.ip, args.port)
-    #start_client(args.ip, args.port)
+
 
 if __name__ == "__main__":
     main()
