@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import pathlib
 import socket
 import threading
 import random # [Added] Needed for dynamic resizing logic
@@ -55,13 +56,15 @@ def handle_packets(packet, state: ConnectionState):
             state.state = "SYN_RCVD"
             # SYN consumes one Sequence Number (Seq 0 -> Expect 1)
             state.expected_seq += 1
-            payload = packet.get("payload", "")
-            if payload == "file":
+            #we check if file is set to true by the client to read the config file
+            payload = packet.get
+            if packet.get("file") is True:
                 print(f"[Server] reading settings from file")
-                #now we read from file
-                os.chdir("..")  # we go to the parent directory as the server needs the file too.
+                #finding config path
+                CURRENT_DIR = pathlib.Path(__file__).resolve().parent
+                CONFIG_PATH = CURRENT_DIR.parent / "config.txt"
                 config_dict = {}
-                with open("config.txt", encoding="utf-8") as config:  # open file with default closing
+                with open(CONFIG_PATH, "r", encoding="utf-8") as config:  # open file with default closing
                     for line in config:  # go over each line in the file
                         line = line.strip()  # should make the line empty in case of whitespace
                         if line:  # if line is not empty
@@ -76,8 +79,11 @@ def handle_packets(packet, state: ConnectionState):
                                 config_dict[key] = value  # set the value of key
                             except ValueError:
                                 print("invalid file format")  # if no semicolon, the format is not ok
-                state.current_max_msg_size = config_dict.get("maximum_msg_size") #we set max message size from file
-                SERVER_CONFIG["dynamic_window"] = config_dict.get("dynamic message size") #we set dynamic_window from the fil
+                try:
+                    state.current_max_msg_size = int(config_dict.get("maximum_msg_size")) #we set max message size from file
+                    SERVER_CONFIG["dynamic_window"] = bool(config_dict.get("dynamic message size")) #we set dynamic_window from the file
+                except ValueError:
+                    print("invalid values in the file")  # either max_msg_size is not in or dynamic message size is not bool
             return {#either way we return the syn ack packet with the max message size and dynamic window from server
                 "flags": FLAG_SYN | FLAG_ACK, 
                 "ack": 0,
