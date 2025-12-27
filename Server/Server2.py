@@ -17,7 +17,7 @@ FLAG_ACK = 0x10
 # --- SERVER CONFIG ---
 SERVER_CONFIG = {
     "max_msg_size": 20,   # Initial default
-    "dynamic_window": True # Enable the dynamic behavior [cite: 212]
+    "dynamic_window": True # Enable the dynamic behavior 
 }
 
 class ConnectionState:
@@ -81,7 +81,7 @@ def handle_packets(packet, state: ConnectionState):
                                 print("invalid file format")  # if no semicolon, the format is not ok
                 try:
                     state.current_max_msg_size = int(config_dict.get("maximum_msg_size")) #we set max message size from file
-                    SERVER_CONFIG["dynamic_window"] = bool(config_dict.get("dynamic message size")) #we set dynamic_window from the file
+                    SERVER_CONFIG["dynamic_window"] = config_dict.get("dynamic_message_size") #we set dynamic_window from the file
                 except ValueError:
                     print("invalid values in the file")  # either max_msg_size is not in or dynamic message size is not bool
             return {#either way we return the syn ack packet with the max message size and dynamic window from server
@@ -149,10 +149,13 @@ def handle_packets(packet, state: ConnectionState):
                         time.sleep(1.0)
                         state.state = "LAST_ACK"
                         return {"flags": FLAG_ACK, "ack": state.expected_seq + 1}
+                
+                
                 # --- [ADDED] DYNAMIC RESIZING LOGIC ---
                 # "The server can also send the flag 'dynamic message size = true'"
                 response = {"flags": FLAG_ACK, "ack": state.expected_seq - 1}
-                if SERVER_CONFIG["dynamic_window"]:
+                print(f"dynamic_window: {SERVER_CONFIG["dynamic_window"]}")
+                if SERVER_CONFIG["dynamic_window"] == str(True):
                     new_size = state.current_max_msg_size
                     if SERVER_CONFIG["dynamic_window"] and random.random() < 0.2: # 20% chance to change
                         # 3:1 Bias: 75% chance to grow/stay, 25% chance to shrink

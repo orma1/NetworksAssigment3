@@ -1,5 +1,5 @@
-message:”C:\some_path\message.txt”
+message:”/home/danielstet/Development/University/Networks/Matala3/NetworksAssigment3/Tests/test.txt”
 maximum_msg_size:40
 window_size:3
 timeout:5
-dynamic message size:True
+dynamic_message_size:False
