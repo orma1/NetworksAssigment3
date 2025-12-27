@@ -80,7 +80,7 @@ def handle_packets(packet, state: ConnectionState):
                 SERVER_CONFIG["dynamic_window"] = config_dict.get("dynamic message size") #we set dynamic_window from the fil
             return {#either way we return the syn ack packet with the max message size and dynamic window from server
                 "flags": FLAG_SYN | FLAG_ACK, 
-                "ack": 0, 
+                "ack": 0,
                 "max_msg_size": state.current_max_msg_size,
                 "dynamic_window": SERVER_CONFIG["dynamic_window"],
             }
@@ -109,9 +109,9 @@ def handle_packets(packet, state: ConnectionState):
                 state.expected_seq += 1
                 return {
                     "flags": FLAG_ACK | FLAG_PSH,
-                    "ack": seq_num + 1,
+                    "ack": seq_num,
                     "max_msg_size": state.current_max_msg_size,
-                    "payload": "SIZE_OK"  # Optional acknowledgement text
+                    "payload": f"The requested size was: {state.current_max_msg_size}"  # Optional acknowledgement text
                 }
             if len(payload) > state.current_max_msg_size:
                 print(f"[!] Dropping Oversized Seq {seq_num} ({len(payload)} > {state.current_max_msg_size})")

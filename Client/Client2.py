@@ -71,12 +71,13 @@ def handle_packets(packet, state):
             # Prepare Step 3: Send ACK to complete connection 
             with state.lock:
                 state.state = "ESTABLISHED"
-                state.seq_num += 1
+                #state.seq_num += 1
                 # Handshake consumes Seq 0. Window starts at Seq 1.
                 state.window_base = 1 
             
             # Respond with ACK
-            return {"flags": FLAG_ACK, "seq": state.seq_num, "ack": 0}
+                #state.seq_num += 1 #Ack consumes 1 seq_num
+            return {"flags": FLAG_ACK, "ack": 0, "dynamic_message_size": state.dynamic_message_size}
         elif state.timer_start is not None:
                 elapsed = time.time() - state.timer_start
                 if elapsed > state.timeout_value:
@@ -146,7 +147,7 @@ def handle_packets(packet, state):
                 state.state = "CLOSED"
 
             print(f"   >>> [Send] Step 4: Sending Final ACK ({ack_to_send}). Connection CLOSED.")
-            return {"flags": FLAG_ACK, "seq": state.seq_num, "ack": ack_to_send}
+            return {"flags": FLAG_ACK, "seq": state.seq_num, "dynamic_message_size": state.dynamic_message_size}
 
     return None
 
@@ -207,7 +208,6 @@ def sliding_window(conn: socket.socket, state, buff_data: str, total_len: int, n
             packet = {
                 "flags": FLAG_PSH, 
                 "seq": next_seq,
-                "ack": 0, 
                 "payload": payload
             }
             
@@ -260,7 +260,7 @@ def fin_four_step_handshake(conn: socket.socket, next_seq: int, state: ClientSta
         state.state = "Wait_for_FIN_ACK"
         # Seq matches the next expected sequence number
         # we create a new packet with the fin flag to send to the server
-        fin_packet = {"flags": FLAG_FIN, "seq": next_seq, "ack": 0}
+        fin_packet = {"flags": FLAG_FIN, "seq": next_seq}
 
     print("Step 1: Sending FIN. State -> Wait_for_FIN_ACK")
     #send the packet to the server
@@ -301,12 +301,11 @@ def ask_size(conn, state):
     req_payload = "REQ_SIZE"
     with state.lock:
         state.state = "ESTABLISHED"
-        current_seq = state.seq_num
+        state.seq_num += 1
 
     packet = {
         "flags": FLAG_PSH,
-        "seq": current_seq,
-        "ack": 0,
+        "seq": state.seq_num,
         "payload": req_payload
     }
 
@@ -337,7 +336,7 @@ def sender_logic(conn: socket.socket, state: ClientState, data_source: str):
     buff_data = data_source 
     total_len = len(buff_data)
     
-    #seq0: three-way handshake, seq1: request message size
+    #seq0: three-way handshake, seq1: ACK, Seq2: req_size
     seq_map = {2: 0} #<- data transfer: seq2 - seqN+2 (N= num of segmenations)
     next_seq = 2
     #TODO - make sure to do an if according to if we ask server or not
@@ -416,7 +415,7 @@ def start_client(ip: str, port: int, state: ClientState, message: str):
         # 4. Initiate Handshake (Client Speaks First) [cite: 19]
         print(">>> Initiating Handshake (Sending SYN)...")
         state.state = "SYNSENT"
-        syn_packet = {"flags": FLAG_SYN, "seq": 0, "ack": 0, "file": state.file}
+        syn_packet = {"flags": FLAG_SYN, "seq": 0, "file": state.file}
         clientSocket.sendall((json.dumps(syn_packet) + "\n").encode("utf-8"))
         
         # 5. Enter Receiver Loop (Main Thread)
