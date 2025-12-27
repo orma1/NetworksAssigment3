@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import socket
 import threading
 import random # [Added] Needed for dynamic resizing logic
@@ -52,9 +53,31 @@ def handle_packets(packet, state: ConnectionState):
         if flags & FLAG_SYN:
             state.state = "SYN_RCVD"
             # SYN consumes one Sequence Number (Seq 0 -> Expect 1)
-            state.expected_seq += 1 
-            
-            return {
+            state.expected_seq += 1
+            payload = packet.get("payload", "")
+            if payload == "file":
+                print(f"[Server] reading settings from file")
+                #now we read from file
+                os.chdir("..")  # we go to the parent directory as the server needs the file too.
+                config_dict = {}
+                with open("config.txt", encoding="utf-8") as config:  # open file with default closing
+                    for line in config:  # go over each line in the file
+                        line = line.strip()  # should make the line empty in case of whitespace
+                        if line:  # if line is not empty
+                            try:
+                                key, value = line.split(':',1)  # split line by semicolon into key:value
+                                key = key.strip()
+                                value = value.strip()
+                                #we set maxsplit to 1 to make sure it does not
+                                #Strip both standard quotes (") and curly quotes (” and “)
+                                # as it is not part of the file name
+                                value = value.strip('"').strip('”').strip('“')
+                                config_dict[key] = value  # set the value of key
+                            except ValueError:
+                                print("invalid file format")  # if no semicolon, the format is not ok
+                state.current_max_msg_size = config_dict.get("maximum_msg_size") #we set max message size from file
+                SERVER_CONFIG["dynamic_window"] = config_dict.get("dynamic message size") #we set dynamic_window from the fil
+            return {#either way we return the syn ack packet with the max message size and dynamic window from server
                 "flags": FLAG_SYN | FLAG_ACK, 
                 "ack": 0, 
                 "max_msg_size": state.current_max_msg_size,

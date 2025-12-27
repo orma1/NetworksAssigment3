@@ -5,8 +5,6 @@ import socket
 import threading
 import time
 
-#import FileInterpeter
-
 # --- NAMING CONVENTIONS & FLAGS ---
 # These flags mimic the standard TCP header bits.
 # FLAG_FIN (0x01): "Finish". Used to gracefully close the connection.
@@ -38,6 +36,7 @@ class ClientState:
         # Timer Logic
         self.timer_start = None
         self.timeout_value = CLIENT_CONFIG["timeout"]
+        self.file = False
 
 def handle_packets(packet, state):
     """
@@ -166,7 +165,7 @@ def three_way_handshake(state):
 def sliding_window(conn: socket.socket, state, buff_data: str, total_len: int, next_seq: int, seq_map: dict):
     """
     The Core Loop: Handles Sending, Window Management, and Retransmission.
-    We implemented an HYBRID of GBN and Selective Repreat algorithm
+    We implemented an HYBRID of GBN and Selective Repeat algorithm
     """
     # --- 3. SLIDING WINDOW LOOP ---
     while True:
@@ -392,11 +391,11 @@ def handle_stream(conn: socket.socket, addr: tuple[str, int], state: ClientState
         except Exception as e:
             print(f"Connection Error: {e}")
 
-def start_client(ip: str, port: int):
+def start_client(ip: str, port: int, state: ClientState, message: str):
     SERVER_ADDRESS = (ip, port)
     
     # 1. Create Shared State
-    state = ClientState()
+    #state = ClientState()
     # 2. Connect Socket
     # We create the socket OUTSIDE the 'with' block of handle_stream 
     # so we can pass it to the sender thread too.
@@ -409,11 +408,11 @@ def start_client(ip: str, port: int):
         
         # 3. Start Sender Thread (Background)
         # This simulates reading from a file and sending chunks
-        dummy_file_data = "This is a long message that demonstrates the Go-Back-N sliding window protocol logic." * 5
+        #dummy_file_data = "This is a long message that demonstrates the Go-Back-N sliding window protocol logic." * 5
         
         sender_thread = threading.Thread(
             target=sender_logic,
-            args=(clientSocket, state, dummy_file_data),
+            args=(clientSocket, state, message),
             daemon=True
         )
         sender_thread.start()
@@ -421,7 +420,7 @@ def start_client(ip: str, port: int):
         # 4. Initiate Handshake (Client Speaks First) [cite: 19]
         print(">>> Initiating Handshake (Sending SYN)...")
         state.state = "SYNSENT"
-        syn_packet = {"flags": FLAG_SYN, "seq": 0, "ack": 0}
+        syn_packet = {"flags": FLAG_SYN, "seq": 0, "ack": 0, "file": state.file}
         clientSocket.sendall((json.dumps(syn_packet) + "\n").encode("utf-8"))
         
         # 5. Enter Receiver Loop (Main Thread)
@@ -436,29 +435,60 @@ def start_client(ip: str, port: int):
         clientSocket.close()
 #TODO co-config, a function will read and update both server and client
 #TODO if client chooses manual typing we will change the values accordingly
-# #def user_menu():
-#     print("Hello please choose from the following options:")
-#     print("1 - work with user input")
-#     print("2 - work from file")
-#     option = input()
-#     if option == 1:
-#         message = input("enter message for the server")
-#         window_size = input("choose window size - number of packets")
-#         timeout = input("enter the number of seconds for retransmission")
-#     elif option == 2:
-#         os.chdir("..")# we go to the parent directory as the server needs the file too.
-#         options = FileInterpeter.readConfigFile("Config.txt")
-#         message = options.get("message")
-#         maximum_msg_size = options.get("maximum_msg_size")
-#         window_size = options.get("window_size")
-#         timeout = options.get("timout")
+def user_menu(ip: str, port: int):
+    print("Please choose from the following options:")
+    print("1 - work with user input")
+    print("2 - work from file")
+    option = input()
+    state = ClientState()
+    message = ""
+    if option == "1":
+        #user will choose message, window size and timeout value.
+        # maximum_msg_size and dynamic_msg_size will be determined by the server
+        message = input("enter message for the server")
+        state.window_size = int(input("choose window size - number of packets"))
+        state.timeout_value = int(input("enter the number of seconds for retransmission"))
+    elif option == "2":#we will take values including maximum_msg_size from the config file
+        os.chdir("..")# we go to the parent directory as the server needs the file too.
+        config_dict = {}
+        with open("config.txt", encoding="utf-8") as config:  # open file with default closing
+            for line in config:  # go over each line in the file
+                line = line.strip()  # should make the line empty in case of whitespace
+                if line:  # if line is not empty
+                    try:
+                        key, value = line.split(':', 1)  # split line by semicolon into key:value
+                        key = key.strip()
+                        value = value.strip()
+                        # we set maxsplit to 1 to make sure it does not
+                        # Strip both standard quotes (") and curly quotes (” and “)
+                        # as it is not part of the file name
+                        value = value.strip('"').strip('”').strip('“')
+                        config_dict[key] = value  # set the value of key
+                    except ValueError:
+                        print("invalid file format")  # if no semicolon, the format is not ok
+        message_file = open(str(config_dict.get("message")))
+        for line in message_file:
+            line = line.strip()
+            if line:
+                message += line
+        print(message)
+        state.maximum_msg_size = int(config_dict.get("maximum_msg_size"))
+        state.window_size = int(config_dict.get("window_size"))
+        state.timeout = int(config_dict.get("timeout"))
+        state.dynamic_message_size = config_dict.get("dynamic message size")
+        state.file = True #we need to update the server about file reading so he will read too
+    else:
+        print("invalid input please choose one or 2")
+        user_menu(ip, port)
+    start_client(ip, port, state, message)
 
 def main():
     ap = argparse.ArgumentParser(description="JSON TCP Client (MATALA3)")
     ap.add_argument("--ip", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=13000)
     args = ap.parse_args()
-    start_client(args.ip, args.port)
+    user_menu(args.ip, args.port)
+    #start_client(args.ip, args.port)
 
 if __name__ == "__main__":
     main()
