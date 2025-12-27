@@ -337,13 +337,9 @@ def sender_logic(conn: socket.socket, state: ClientState, data_source: str):
     buff_data = data_source 
     total_len = len(buff_data)
     
-    #depending on if we have dynamic message size or not we need to set seq accordingly
-    if not state.dynamic_message_size:
-        seq_map = {2: 0}
-        next_seq = 2
-    else:
-        seq_map = {1: 0}
-        next_seq = 1
+    #seq0: three-way handshake, seq1: request message size
+    seq_map = {2: 0} #<- data transfer: seq2 - seqN+2 (N= num of segmenations)
+    next_seq = 2
     #TODO - make sure to do an if according to if we ask server or not
 
     
@@ -468,9 +464,7 @@ def user_menu(ip: str, port: int):
                         print("invalid file format")  # if no semicolon, the format is not ok
         message_file = open(str(config_dict.get("message")))
         for line in message_file:
-            line = line.strip()
-            if line:
-                message += line
+            message += line
         print(message)
         state.maximum_msg_size = int(config_dict.get("maximum_msg_size"))
         state.window_size = int(config_dict.get("window_size"))

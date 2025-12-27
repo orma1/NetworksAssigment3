@@ -27,6 +27,7 @@ class ConnectionState:
         self.buffer = {}
         # Track the current limit for this specific connection
         self.current_max_msg_size = SERVER_CONFIG["max_msg_size"]
+        self.message = ""
 
 def handle_packets(packet, state: ConnectionState):
     """
@@ -126,12 +127,14 @@ def handle_packets(packet, state: ConnectionState):
             if seq_num == state.expected_seq:
                 print(f"   -> Accepted Data Seq {seq_num} | (M{seq_num})")
                 state.expected_seq += 1 # We got N, now we expect N+1
+                state.message += packet.get("payload")
                 
                 # Check Buffer for gaps we can now fill 
                 while state.expected_seq in state.buffer: 
                     print(f"   -> Buffer Fill Seq {state.expected_seq}")
                     del state.buffer[state.expected_seq]
                     state.expected_seq += 1
+                    state.message += packet.get("payload")
                 #if we have later packets in the buffer, we need to check if we got the fin already from the client
                 if state.expected_seq in state.buffer:
                     buffered_packet = state.buffer[state.expected_seq]
@@ -192,7 +195,9 @@ def handle_packets(packet, state: ConnectionState):
         if flags & FLAG_ACK:
             #if we received the ack for our fin, we can close the connection with the client
             #because server is usually always on, I changed the state for listen, to wait for a new client
+            print(f"[Server] the message is: {state.message}")
             print("[Server] Received Final ACK. Connection Finished. now we wait for a new connection")
+
             state.state = "LISTEN"
 
     return None
