@@ -1,5 +1,0 @@
-message:”c:/some_path/message.txt”
-maximum_msg_size:400
-window_size:4
-timeout:5
-dynamic message size:False
