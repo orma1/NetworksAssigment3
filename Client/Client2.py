@@ -486,20 +486,24 @@ def user_menu(ip: str, port: int):
             for line in message_file:
                 message += line
             print(message)
-        except FileNotFoundError:
-            print(f"Critical Error: Config file not found at {CONFIG_PATH} \n OR: \n Message was not found: {message_file}")
-        
-        try:
             state.maximum_msg_size = int(config_dict.get("maximum_msg_size"))
             state.window_size = int(config_dict.get("window_size"))
-            state.timeout = int(config_dict.get("timeout"))
+            if state.window_size <= 0:
+                print("window_size > 0")
+                raise ValueError
+            state.timeout_value = int(config_dict.get("timeout"))
+            if state.timeout_value <= 2:
+                print("timeout > 2")
+                raise ValueError
             state.dynamic_message_size = bool(config_dict.get("dynamic message size"))
-            state.file = True #we need to update the server about config reading so he will read too
+            state.file = True  # we need to update the server about config reading so he will read too
+        except FileNotFoundError:
+            print(f"Critical Error: Config file not found at {CONFIG_PATH} \n OR: \n Message was not found: {message_file}")
         except ValueError:
             print("invalid input in the file, make sure it is like the skeleton provided in assigment 3")
             user_menu(ip, port)
     else:
-        print("invalid input please choose one or 2")
+        print("invalid input please choose 1 or 2")
         user_menu(ip, port)
     start_client(ip, port, state, message)
 
@@ -510,78 +514,6 @@ def print_options():
     print("1 - work with user input")
     print("2 - work from file")
 
-
-def user_menu(ip: str, port: int):
-
-    # Init
-    state = ClientState()
-    message = ""
-
-    # Get inputs from user
-    #user will choose message, window size and timeout value.
-    print_options()
-    option = input()
-
-    # Process the choices
-    if option == "1":
-        # maximum_msg_size and dynamic_msg_size will be determined by the server
-        message = input("enter message for the server: \n")
-        try:
-            state.window_size = int(input("choose window size - number of packets: \n"))
-            if state.window_size <= 0:
-                print("window_size > 0")
-                raise ValueError
-            state.timeout_value = int(input("enter the number of seconds for retransmission: \n"))
-            if state.timeout_value <=2:
-                print("timeout > 2")
-                raise ValueError
-        except ValueError:
-            print("invalid parameters try again")
-            user_menu(ip, port)
-
-    #we will take values including maximum_msg_size from the config file
-    elif option == "2":
-        try:
-            # finding the config Path
-            CURRENT_DIR = pathlib.Path(__file__).resolve().parent
-            CONFIG_PATH = CURRENT_DIR.parent / "config.txt"
-
-            config_dict = {}
-            with open(CONFIG_PATH, "r", encoding="utf-8") as config:  # open file with default closing
-                for line in config:  # go over each line in the file
-                    line = line.strip()  # should make the line empty in case of whitespace
-                    if line:  # if line is not empty
-                        try:
-                            key, value = line.split(':', 1)  # split line by semicolon into key:value
-                            key = key.strip()
-                            value = value.strip()
-                            # we set maxsplit to 1 to make sure it does not
-                            # Strip both standard quotes (") and curly quotes (” and “)
-                            # as it is not part of the file name
-                            value = value.strip('"').strip('”').strip('“')
-                            config_dict[key] = value  # set the value of key
-                        except ValueError:
-                            print("invalid file format")  # if no semicolon, the format is not ok
-            message_file = open(str(config_dict.get("message")))
-            for line in message_file:
-                message += line
-            print(message)
-        except FileNotFoundError:
-            print(f"Critical Error: Config file not found at {CONFIG_PATH} \n OR: \n Message was not found: {message_file}")
-        
-        try:
-            state.maximum_msg_size = int(config_dict.get("maximum_msg_size"))
-            state.window_size = int(config_dict.get("window_size"))
-            state.timeout = int(config_dict.get("timeout"))
-            state.dynamic_message_size = bool(config_dict.get("dynamic message size"))
-            state.file = True #we need to update the server about config reading so he will read too
-        except ValueError:
-            print("invalid input in the file, make sure it is like the skeleton provided in assigment 3")
-            user_menu(ip, port)
-    else:
-        print("invalid input please choose one or 2")
-        user_menu(ip, port)
-    start_client(ip, port, state, message)
 
 def main():
     ap = argparse.ArgumentParser(description="JSON TCP Client (MATALA3)")

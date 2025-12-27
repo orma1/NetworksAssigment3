@@ -1,5 +1,5 @@
 message:”C:\some_path\message.txt”
 maximum_msg_size:40
-window_size:4
+window_size:3
 timeout:5
 dynamic message size:True
