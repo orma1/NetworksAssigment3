@@ -445,9 +445,9 @@ def user_menu(ip: str, port: int):
     if option == "1":
         #user will choose message, window size and timeout value.
         # maximum_msg_size and dynamic_msg_size will be determined by the server
-        message = input("enter message for the server")
-        state.window_size = int(input("choose window size - number of packets"))
-        state.timeout_value = int(input("enter the number of seconds for retransmission"))
+        message = input("enter message for the server ")
+        state.window_size = int(input("choose window size - number of packets "))
+        state.timeout_value = int(input("enter the number of seconds for retransmission "))
     elif option == "2":#we will take values including maximum_msg_size from the config file
         os.chdir("..")# we go to the parent directory as the server needs the file too.
         config_dict = {}
