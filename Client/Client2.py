@@ -442,8 +442,18 @@ def user_menu(ip: str, port: int):
         #user will choose message, window size and timeout value.
         # maximum_msg_size and dynamic_msg_size will be determined by the server
         message = input("enter message for the server ")
-        state.window_size = int(input("choose window size - number of packets "))
-        state.timeout_value = int(input("enter the number of seconds for retransmission "))
+        try:
+            state.window_size = int(input("choose window size - number of packets "))
+            if state.window_size <= 0:
+                print("window_size > 0")
+                raise ValueError
+            state.timeout_value = int(input("enter the number of seconds for retransmission "))
+            if state.timeout_value <=2:
+                print("timeout > 2")
+                raise ValueError
+        except ValueError:
+            print("invalid parameters try again")
+            user_menu(ip, port)
     elif option == "2":#we will take values including maximum_msg_size from the config file
         os.chdir("..")# we go to the parent directory as the server needs the file too.
         config_dict = {}
@@ -466,11 +476,15 @@ def user_menu(ip: str, port: int):
         for line in message_file:
             message += line
         print(message)
-        state.maximum_msg_size = int(config_dict.get("maximum_msg_size"))
-        state.window_size = int(config_dict.get("window_size"))
-        state.timeout = int(config_dict.get("timeout"))
-        state.dynamic_message_size = config_dict.get("dynamic message size")
-        state.file = True #we need to update the server about file reading so he will read too
+        try:
+            state.maximum_msg_size = int(config_dict.get("maximum_msg_size"))
+            state.window_size = int(config_dict.get("window_size"))
+            state.timeout = int(config_dict.get("timeout"))
+            state.dynamic_message_size = bool(config_dict.get("dynamic message size"))
+            state.file = True #we need to update the server about file reading so he will read too
+        except ValueError:
+            print("invalid input in the file, make sure it is like the skeleton provided in assigment 3")
+            user_menu(ip, port)
     else:
         print("invalid input please choose one or 2")
         user_menu(ip, port)
