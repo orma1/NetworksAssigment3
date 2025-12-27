@@ -322,7 +322,7 @@ def ask_size(conn, state):
 
     print(f"[Sender] Size Updated: {state.max_msg_size}. Starting Data Transfer.")
 
-def sender_logic(conn: socket.socket, state: ClientState, data_source: str):
+def TCP_emulator(conn: socket.socket, state: ClientState, data_source: str):
     """
     Main Sender Loop: Orchestrates the connection lifecycle.
     """
@@ -406,7 +406,7 @@ def start_client(ip: str, port: int, state: ClientState, message: str):
         #dummy_file_data = "This is a long message that demonstrates the Go-Back-N sliding window protocol logic." * 5
         
         sender_thread = threading.Thread(
-            target=sender_logic,
+            target=TCP_emulator,
             args=(clientSocket, state, message),
             daemon=True
         )
