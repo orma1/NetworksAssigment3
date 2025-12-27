@@ -45,24 +45,24 @@ def handle_packets(packet, state):
     # Debug
     # LOGS: "[RECV] Flags={flags}, Ack={server_ack}"
 
-    # --- 1. HANDLE HANDSHAKE (Server sent SYN-ACK) ---
+    # --- 1. HANDLE HANDSHAKE ---
 
     if state.state == "THREE_WAY_HANDSHAKE":
+        # if Server sent SYN-ACK
         if (flags & FLAG_SYN) and (flags & FLAG_ACK):
             print("   >>> Handshake Step 2: Received SYN-ACK")
             #if we have max message size in packet, we update it
             if "max_msg_size" in packet:
                 state.max_msg_size = int(packet["max_msg_size"])
 
-            # Use the explicit flag if provided, otherwise default to False
-            if "dynamic_window" in packet:
-                state.dynamic_message_size = packet["dynamic_window"]
+            # Use the explicit dynamic_message_sizew flag if provided, otherwise default to False
+            if "dynamic_message_size" in packet:
+                state.dynamic_message_size = packet["dynamic_message_size"]
                 print(f"   >>> Server Dynamic Mode: {state.dynamic_message_size}")
             else:
                 # Fallback: If server didn't send the flag but sent a size,
                 # you might want to default to True or False depending on preference.
                 state.dynamic_message_size = False
-                # --- FIX END ---
 
 
             # Prepare Step 3: Send ACK to complete connection 
@@ -148,7 +148,7 @@ def handle_packets(packet, state):
 
     return None
 
-def three_way_handshake(state):
+def wait_for_SYN_ACK(state):
     """
     Waits for the Receiver Thread (handle_packets) to confirm 
     the connection is ESTABLISHED before we start sending data.
@@ -324,7 +324,7 @@ def TCP_emulator(conn: socket.socket, state: ClientState, data_source: str):
     Main Sender Loop: Orchestrates the connection lifecycle.
     """
     # 1. Handshake
-    three_way_handshake(state)
+    wait_for_SYN_ACK(state)
     #we ask after handshake for initial message size
     ask_size(conn, state)
     print("[Sender] Connection Established. Starting Dynamic Data Transfer...")
