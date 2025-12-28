@@ -24,7 +24,7 @@ class ClientState:
     """Tracks the Client's View of the Connection"""
     def __init__(self):
         self.lock = threading.Lock()
-        self.state = "CLOSED"    # CLOSED -> THREE_WAY_HANDSHAKE -> REQ_SIZE -> DATA_TRANSFER -> WAIT_FOR_FIN_ACK -> FIN_ACK
+        self.state = "CLOSED"    # CLOSED -> THREE_WAY_HANDSHAKE -> REQ_SIZE -> DATA_TRANSFER -> GRACEFUL_SHUTDOWN -> SHUT
         self.seq_num = 0         # Client's current sequence number (for Handshake)
         self.window_base = 0     # The oldest unacknowledged packet sequence number
         self.max_msg_size = CLIENT_CONFIG["window_size"] # Default size, updated dynamically by Server
@@ -121,15 +121,15 @@ def handle_packets(packet, state):
                     state.timer_start = time.time()
         return None
     # We sent our fin packet
-    elif state.state == "Wait_for_FIN_ACK":
+    elif state.state == "GRACEFUL_SHUTDOWN":
         if (flags & FLAG_ACK) and not (flags & FLAG_FIN):
             print("   >>> [Recv] Step 2: Server ACKed our FIN. Now waiting for Server FIN...")
             with state.lock:
                 # We move to the next state, but we DON'T return yet.
                 # The same packet might contain the FIN (Piggybacking).
-                state.state = "FIN_ACK"
+                state.state = "SHUT"
 
-    if state.state in ["Wait_for_FIN_ACK", "FIN_ACK"]:
+    if state.state in ["GRACEFUL_SHUTDOWN", "SHUT"]:
         if flags & FLAG_FIN:
             print("   >>> [Recv] Step 3: Server sent FIN.")
 
@@ -250,12 +250,12 @@ def fin_four_step_handshake(conn: socket.socket, next_seq: int, state: ClientSta
     # --- 4. TEARDOWN (FIN) ---
     print("[Sender] All data acknowledged. Sending FIN...")
     with state.lock:
-        state.state = "Wait_for_FIN_ACK"
+        state.state = "GRACEFUL_SHUTDOWN"
         # Seq matches the next expected sequence number
         # we create a new packet with the fin flag to send to the server
         fin_packet = {"flags": FLAG_FIN, "seq": next_seq}
 
-    print("Step 1: Sending FIN. State -> Wait_for_FIN_ACK")
+    print("Step 1: Sending FIN. State -> GRACEFUL_SHUTDOWN")
     #send the packet to the server
     conn.sendall((json.dumps(fin_packet) + "\n").encode("utf-8"))
 
@@ -263,8 +263,8 @@ def fin_four_step_handshake(conn: socket.socket, next_seq: int, state: ClientSta
     print("Waiting for Server to ACK our FIN...")
     while True:
         with state.lock:
-            #if we got the fin_ack we can finish waiting
-            if state.state == "FIN_ACK" or state.state == "CLOSED":
+            #if we got the ACK on our FIN we can finish waiting
+            if state.state == "SHUT" or state.state == "CLOSED":
                 break
         time.sleep(0.1)
 
