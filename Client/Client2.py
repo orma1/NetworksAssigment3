@@ -30,10 +30,16 @@ class ClientState:
         self.max_msg_size = CLIENT_CONFIG["window_size"] # Default size, updated dynamically by Server
         self.window_size = 4     # Sliding window capacity
         self.dynamic_message_size = False
+        self.fin_ack_num = 0
         # Timer Logic
         self.timer_start = None
         self.timeout_value = CLIENT_CONFIG["timeout"]
         self.file = False
+        # Events
+        self.handshake_event = threading.Event()
+        self.fin_event = threading.Event()
+        self.done_event = threading.Event()
+
 
 def handle_packets(packet, state):
     """
@@ -68,16 +74,12 @@ def handle_packets(packet, state):
                 state.state = "REQ_SIZE"
                 # Handshake consumes Seq 0. Window starts at Seq 1.
                 state.window_base = 1 
-            
-            #Send ACK to complete the Three Way Handshake
-            return {"flags": FLAG_ACK, "ack": 0, "dynamic_message_size": state.dynamic_message_size}
-        
-        # Fall back in case the Three Way handshake went wrong
-        elif state.timer_start is not None:
-                elapsed = time.time() - state.timer_start
-                if elapsed > state.timeout_value:#if timer has finished
-                    print(f"[!!!] TIMEOUT ({elapsed:.2f}s)! Resending Syn packet")
+                state.timer_start = None
 
+            # Signal the TCP_Emulator <-- Sender Thread
+            state.handshake_event.set()
+
+            return None
     #if connection is established we need to ask for initial message size
     #this happens no matter if message size is dynamic or not
     elif state.state == "REQ_SIZE":
@@ -135,28 +137,50 @@ def handle_packets(packet, state):
         if flags & FLAG_FIN:
             print("   >>> [Recv] Step 3: Server sent FIN.")
 
-            # Step 4: Send Final ACK
-            ack_to_send = server_seq + 1
-
             with state.lock:
                 state.state = "CLOSED"
-
-            print(f"   >>> [Send] Step 4: Sending Final ACK ({ack_to_send}). Connection CLOSED.")
-            return {"flags": FLAG_ACK, "seq": state.seq_num, "dynamic_message_size": state.dynamic_message_size}
-
+                state.fin_ack_num = server_seq + 1
+            
+            # Avtivate event
+            state.fin_event.set()
+            state.done_event.wait(timeout=2.0)
+            return None
     return None
 
-def wait_for_SYN_ACK(state):
-    """
-    Waits for the Receiver Thread (handle_packets) to confirm 
-    the connection is ESTABLISHED before we start sending data.
-    """
+def wait_for_SYN_ACK(conn ,state):
     print("[Sender] Waiting for Handshake...")
     while True:
+        # Wait for the signal OR for 0.1 seconds to pass
+        # This replaces the sleep() and the busy while loop
+        is_signaled = state.handshake_event.wait(timeout=0.1)
+
+        if is_signaled:
+            # --- SIGNAL RECEIVED: SEND ACK ---
+            print("   >>> [Sender] Signal received. Sending ACK...")
+            
+            ack_packet = {
+                "flags": FLAG_ACK, 
+                "ack": 0, 
+            }
+            conn.sendall((json.dumps(ack_packet) + "\n").encode("utf-8"))
+            
+            # Clear event in case we need to reuse it
+            state.handshake_event.clear()
+            break
+
+        # --- SIGNAL NOT RECEIVED: CHECK TIMEOUT ---
+        # If we woke up because of timeout=0.1, check if we need to resend SYN
         with state.lock:
-            if state.state == "REQ_SIZE":
-                break
-        time.sleep(0.1)
+            if state.state == "THREE_WAY_HANDSHAKE" and state.timer_start is not None:
+                elapsed = time.time() - state.timer_start
+                if elapsed > state.timeout_value:
+                    print(f"[Sender] Handshake Timeout ({elapsed:.2f}s)! Resending SYN...")
+                    syn_packet = {"flags": FLAG_SYN, "seq": 0, "file": state.file}
+                    try:
+                        conn.sendall((json.dumps(syn_packet) + "\n").encode("utf-8"))
+                        state.timer_start = time.time()
+                    except Exception as e:
+                        print(f"[Sender] Error: {e}")
 
 def sliding_window(conn: socket.socket, state, buff_data: str, total_len: int, next_seq: int, seq_map: dict):
     """
@@ -272,14 +296,27 @@ def fin_four_step_handshake(conn: socket.socket, next_seq: int, state: ClientSta
 
     # --- STEP 3: Wait for Server's FIN (handled by receiver) ---
     print("[Teardown] Server acknowledged. Now waiting for Server to close the connection...")
-    while True:
-        with state.lock:
-            # The receiver deals with the incoming FIN and transitions to CLOSED
-            if state.state == "CLOSED":
-                break
-        time.sleep(0.1)
-
-    print("[Teardown] Connection Closed Cleanly.")
+    is_signaled = state.fin_event.wait(timeout=10.0)
+    if is_signaled:
+            # Construct the Final ACK packet
+            # We retrieve the correct ACK number from the shared state
+            final_ack_packet = {
+                "flags": FLAG_ACK, 
+                "seq": state.seq_num, # Current sequence
+                "ack": state.fin_ack_num, # The seq+1 we stored in receiver
+                "dynamic_message_size": state.dynamic_message_size
+            }
+            
+            try:
+                print(f"   >>> [Sender] Step 4: Sending Final ACK ({state.fin_ack_num}). Connection CLOSED.")
+                conn.sendall((json.dumps(final_ack_packet) + "\n").encode("utf-8"))
+            except Exception as e:
+                print(f"[Sender] Error sending Final ACK: {e}")
+    else:
+        print("[Teardown] Timed out waiting for Server FIN.")
+        print("[Teardown] Client Disconnected.")
+    # Let the Reciver Thread know we are done
+    state.done_event.set()
 
 
 
@@ -318,7 +355,7 @@ def TCP_emulator(conn: socket.socket, state: ClientState, data_source: str):
     Main Sender Loop: Orchestrates the connection lifecycle.
     """
     # 1. Handshake
-    wait_for_SYN_ACK(state)
+    wait_for_SYN_ACK(conn ,state)
     # 2. we ask after handshake for initial message size
     ask_size(conn, state)
     print("[Sender] Connection Established. Starting Dynamic Data Transfer...")
