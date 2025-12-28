@@ -279,10 +279,6 @@ def fin_four_step_handshake(conn: socket.socket, next_seq: int, state: ClientSta
 
     print("[Teardown] Connection Closed Cleanly.")
 
-    # 1. We send FIN (Done above)
-    # 2. We wait for ACK from Server (Handled in handle_packets)
-    # 3. We wait for FIN from Server (Need to add logic in handle_packets to detect this)
-    # 4. We send final ACK (Need to add logic in handle_packets)
 
 
 def ask_size(conn, state):
