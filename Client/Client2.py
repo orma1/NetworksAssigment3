@@ -497,8 +497,8 @@ def print_options():
 
 def main():
     ap = argparse.ArgumentParser(description="JSON TCP Client (MATALA3)")
-    ap.add_argument("--ip", default="127.0.0.1")
-    ap.add_argument("--port", type=int, default=13000)
+    ap.add_argument("--ip", default=CLIENT_CONFIG.get("server_ip"))
+    ap.add_argument("--port", type=int, default=CLIENT_CONFIG.get("server_port"))
     args = ap.parse_args()
     user_menu(args.ip, args.port)
 

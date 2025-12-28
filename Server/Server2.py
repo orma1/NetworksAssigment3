@@ -162,6 +162,7 @@ def handle_packets(packet, state: ConnectionState):
                 print(f"dynamic_message_size: {SERVER_CONFIG["dynamic_message_size"]}")
                 if SERVER_CONFIG["dynamic_message_size"] == str(True):
                     new_size = state.current_max_msg_size
+                    new_size = state.current_max_msg_size
                     if SERVER_CONFIG["dynamic_message_size"] and random.random() < 0.2: # 20% chance to change
                         # 3:1 Bias: 75% chance to grow/stay, 25% chance to shrink
                         change_factor = random.choices([1.5, 0.5], weights=[0.75, 0.25])[0]
