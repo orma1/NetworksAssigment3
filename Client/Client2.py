@@ -55,29 +55,26 @@ def handle_packets(packet, state):
             if "max_msg_size" in packet:
                 state.max_msg_size = int(packet["max_msg_size"])
 
-            # Use the explicit dynamic_message_sizew flag if provided, otherwise default to False
+            # Use the explicit dynamic_message_size flag if provided, otherwise default to False
             if "dynamic_message_size" in packet:
                 state.dynamic_message_size = packet["dynamic_message_size"]
                 print(f"   >>> Server Dynamic Mode: {state.dynamic_message_size}")
             else:
-                # Fallback: If server didn't send the flag but sent a size,
-                # you might want to default to True or False depending on preference.
+                # Fallback: If server didn't send the flag but sent a size, we set dynamic size to False
                 state.dynamic_message_size = False
 
 
-            # Prepare Step 3: Send ACK to complete connection 
+            #Send ACK to complete the connection
             with state.lock:
                 state.state = "REQ_SIZE"
-                #state.seq_num += 1
                 # Handshake consumes Seq 0. Window starts at Seq 1.
                 state.window_base = 1 
             
             # Respond with ACK
-                #state.seq_num += 1 #Ack consumes 1 seq_num
             return {"flags": FLAG_ACK, "ack": 0, "dynamic_message_size": state.dynamic_message_size}
         elif state.timer_start is not None:
                 elapsed = time.time() - state.timer_start
-                if elapsed > state.timeout_value:
+                if elapsed > state.timeout_value:#if timer has finished
                     print(f"[!!!] TIMEOUT ({elapsed:.2f}s)! Resending Syn packet")
     #if connection is established we need to ask for initial message size
     #this happens no matter if message size is dynamic or not
@@ -118,13 +115,12 @@ def handle_packets(packet, state):
                     state.window_base = new_base
                     
                     # Update Timer:
-                    # [cite_start]If the window moves, we restart the timer for the NEW oldest packet. [cite: 10]
+                    # If the window moves, we restart the timer for the NEW oldest packet.
                     # If window becomes empty (all sent packets acked), this timestamp 
                     # will effectively be ignored until the Sender adds a new packet.
                     state.timer_start = time.time()
         return None
-    # Case B: We receive the Server's FIN -> Send Final ACK -> Close
-    # Note: We might receive FIN in FIN_WAIT_2 (normal) or FIN_WAIT_1 (simultaneous close)
+    # We sent our fin packet
     elif state.state == "Wait_for_FIN_ACK":
         if (flags & FLAG_ACK) and not (flags & FLAG_FIN):
             print("   >>> [Recv] Step 2: Server ACKed our FIN. Now waiting for Server FIN...")
@@ -132,7 +128,7 @@ def handle_packets(packet, state):
                 # We move to the next state, but we DON'T return yet.
                 # The same packet might contain the FIN (Piggybacking).
                 state.state = "FIN_ACK"
-    #if state.state == "FIN_ACK":
+
     if state.state in ["Wait_for_FIN_ACK", "FIN_ACK"]:
         if flags & FLAG_FIN:
             print("   >>> [Recv] Step 3: Server sent FIN.")
@@ -213,7 +209,7 @@ def sliding_window(conn: socket.socket, state, buff_data: str, total_len: int, n
                 conn.sendall((json.dumps(packet) + "\n").encode("utf-8"))
                 
                 with state.lock:
-                    # Start Timer if this packet is the 'oldest unacknowledged' [cite: 10]
+                    # Start Timer if this packet is the 'oldest unacknowledged'
                     if state.window_base == next_seq:
                         state.timer_start = time.time()
                 
@@ -230,7 +226,7 @@ def sliding_window(conn: socket.socket, state, buff_data: str, total_len: int, n
                 if elapsed > state.timeout_value:
                     print(f"[!!!] TIMEOUT ({elapsed:.2f}s)! Resending Window starting at {state.window_base}")
                     
-                    # RETRANSMIT LOGIC[cite: 11]:
+                    # RETRANSMIT LOGIC:
                     # 1. Reset 'next_seq' to 'window_base' (Go-Back-N)
                     next_seq = state.window_base
                     
@@ -242,7 +238,7 @@ def sliding_window(conn: socket.socket, state, buff_data: str, total_len: int, n
                         base_offset = seq_map[next_seq]
                         seq_map = {next_seq: base_offset} 
                     
-                    # 3. Restart timer [cite: 12]
+                    # 3. Restart timer
                     state.timer_start = time.time() 
         
         time.sleep(0.01) # Prevent CPU burn
@@ -325,19 +321,16 @@ def TCP_emulator(conn: socket.socket, state: ClientState, data_source: str):
     """
     # 1. Handshake
     wait_for_SYN_ACK(state)
-    #we ask after handshake for initial message size
+    # 2. we ask after handshake for initial message size
     ask_size(conn, state)
     print("[Sender] Connection Established. Starting Dynamic Data Transfer...")
-    #after the handshake finished we ask the server for the message size
-    # 2. Prepare Data
+    # 3. Prepare Data
     buff_data = data_source 
     total_len = len(buff_data)
     
-    #seq0: three-way handshake, seq1: ACK, Seq2: req_size
+    #seq0: three-way handshake, Seq1: req_size
     seq_map = {2: 0} #<- data transfer: seq2 - seqN+2 (N= num of segmenations)
     next_seq = 2
-
-
     
     # 3. Transfer Data
     sliding_window(conn, state, buff_data, total_len, next_seq, seq_map)
