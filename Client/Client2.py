@@ -141,7 +141,7 @@ def handle_packets(packet, state):
                 state.state = "CLOSED"
                 state.fin_ack_num = server_seq + 1
             
-            # Avtivate event
+            # Activate event
             state.fin_event.set()
             state.done_event.wait(timeout=2.0)
             return None
@@ -315,7 +315,7 @@ def fin_four_step_handshake(conn: socket.socket, next_seq: int, state: ClientSta
     else:
         print("[Teardown] Timed out waiting for Server FIN.")
         print("[Teardown] Client Disconnected.")
-    # Let the Reciver Thread know we are done
+    # Let the Receiver Thread know we are done
     state.done_event.set()
 
 
