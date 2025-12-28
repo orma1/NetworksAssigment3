@@ -82,7 +82,8 @@ def handle_packets(packet, state: ConnectionState):
                                 print("invalid file format")  # if no semicolon, the format is not ok
                 try:
                     state.current_max_msg_size = int(config_dict.get("maximum_msg_size")) #we set max message size from file
-                    SERVER_CONFIG["dynamic_message_size"] = config_dict.get("dynamic_message_size") #we set dynamic_message_size from the file
+                    SERVER_CONFIG["max_msg_size"] = config_dict.get("maximum_msg_size") #we set dynamic_message_size from the file
+                    SERVER_CONFIG["dynamic_message_size"] = config_dict.get("dynamic_message_size")  # we set dynamic_message_size from the file
                     if config_dict.get("dynamic_message_size") != "True" and config_dict.get("dynamic_message_size") != "False":
                         print("dynamic message size should be either True or False (with capital letter)")
                         raise ValueError
