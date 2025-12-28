@@ -192,7 +192,7 @@ def handle_packets(packet, state: ConnectionState):
             if seq_num == state.expected_seq:
                 print(f"[Server] Received FIN (Seq {seq_num}). All data received. Sending ACK.")
                 state.state = "LAST_ACK"
-                return {"flags": FLAG_ACK | FLAG_FIN, "ack": seq_num + 1}
+                return {"flags": FLAG_FIN, "ack": seq_num + 1}
             #if we have not finished processing packets we are waiting for finishing processing first,
             # we buffer the fin for late
             elif seq_num > state.expected_seq:
