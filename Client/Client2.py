@@ -63,19 +63,21 @@ def handle_packets(packet, state):
                 # Fallback: If server didn't send the flag but sent a size, we set dynamic size to False
                 state.dynamic_message_size = False
 
-
-            #Send ACK to complete the connection
+            # Update the current State 
             with state.lock:
                 state.state = "REQ_SIZE"
                 # Handshake consumes Seq 0. Window starts at Seq 1.
                 state.window_base = 1 
             
-            # Respond with ACK
+            #Send ACK to complete the Three Way Handshake
             return {"flags": FLAG_ACK, "ack": 0, "dynamic_message_size": state.dynamic_message_size}
+        
+        # Fall back in case the Three Way handshake went wrong
         elif state.timer_start is not None:
                 elapsed = time.time() - state.timer_start
                 if elapsed > state.timeout_value:#if timer has finished
                     print(f"[!!!] TIMEOUT ({elapsed:.2f}s)! Resending Syn packet")
+
     #if connection is established we need to ask for initial message size
     #this happens no matter if message size is dynamic or not
     elif state.state == "REQ_SIZE":
@@ -384,7 +386,6 @@ def start_client(ip: str, port: int, state: ClientState, message: str):
         print(f"Connected to {ip}:{port}")
         
         # 2. Start Sender Thread
-
         sender_thread = threading.Thread(
             target=TCP_emulator,
             args=(clientSocket, state, message),
