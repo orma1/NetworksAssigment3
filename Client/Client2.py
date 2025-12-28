@@ -399,11 +399,8 @@ def handle_stream(conn: socket.socket, state: ClientState):
                         packet = json.loads(raw_json_line.decode("utf-8"))
                         
                         # Process packet and update the SHARED state
-                        resp_packet = handle_packets(packet, state)
-                        
-                        if resp_packet:
-                            out = (json.dumps(resp_packet) + "\n").encode("utf-8")
-                            conn.sendall(out)
+                        handle_packets(packet, state)
+
                             
                     except json.JSONDecodeError:
                         print("Error: Malformed JSON received")
