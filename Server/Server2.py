@@ -132,7 +132,6 @@ def handle_packets(packet, state: ConnectionState):
                     "flags": FLAG_ACK, 
                     "ack": state.expected_seq - 1,
                     "max_msg_size": state.current_max_msg_size, # <-- Sending in the ACK the new valid size
-                    "dynamic_message_size": SERVER_CONFIG["dynamic_message_size"]
                 }
 
             # A. In-Order
